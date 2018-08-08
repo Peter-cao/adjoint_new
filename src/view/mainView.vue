@@ -270,8 +270,16 @@ export default {
         .post("/police/person/getPersonByImg.action", param, config)
         .then(function(response) {
           console.log(response.data);
-          self.queryId = response.data.result.id;
-          self.closeCropper();
+          if (response.data.status) {
+            self.queryId = response.data.result.id;
+            self.closeCropper();
+          } else {
+            self.closeCropper();
+            self.$alert("未识别人员,请重试", "提示", {
+              confirmButtonText: "确定",
+              callback: action => {}
+            });
+          }
         })
         .catch(function(error) {
           console.log(error);
