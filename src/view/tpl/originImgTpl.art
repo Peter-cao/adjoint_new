@@ -1,0 +1,4 @@
+<img src="{{data.followFullUrl}}" title="伴随人员底图" alt="">
+<img src="{{data.personFullUrl}}" title="乘车人员底图" alt="">
+
+

@@ -105,7 +105,7 @@
                   <div class="peerListBox" :class="{hide:item.isHidePeerList}" v-if="item.peerList.length>0">
                     <el-checkbox v-model="item.checked" class="checkBox">只看重点人</el-checkbox>
                     <ul class="peerList">
-                      <li class="peerItem" v-for="(peerItem,peerIndex) in checkedfilter(item.peerList,item.checked)" :key="peerIndex">
+                      <li class="peerItem" v-for="(peerItem,peerIndex) in checkedfilter(item.peerList,item.checked)" :key="peerIndex" @click="peerItemClick(peerItem.id)">
                           <img :src="peerItem.peersSource" class="peerimg">
                           <div class="peername" v-if="peerItem.peersPersonName" @click.stop="openPerson(item.pId)">{{peerItem.peersPersonName}}</div>
                           <div class="name" v-else>未识别</div>
@@ -145,6 +145,24 @@
            <el-button @click="getCropData">识别人脸</el-button>
           </div>
         </div>
+        <div class="originImageWrap">
+            <div class="originImage">
+            </div>
+            <img class="close" src="../assets/image/close1.png" alt="" @click="colseOriginImage">
+        </div>
+        <div class="dialogWrap" :class="{show:showPopPeerList}">
+            <div class="dialog">
+                <div class="ui-dialog-titlebar">
+                    <span class="ui-dialog-title">请选择伴随人员</span>
+                    <div class="ui-dialog-titlebar-close" @click="closePopList"></div>
+                </div>
+                <div id="select-pop" class="ui-dialog-content">
+                  <div class="mouseon" v-for="item in popPeerList" :key="item.id" @click="popPeerClick(item)">
+                      <img :src="item.peersSource" alt="">
+                  </div>
+                </div>
+            </div>
+        </div>
          <input type="file" id="fileinput" ref="fileinput" @change="handleFileChange" style="display:none" accept="image/*" />
     </div>
 </template>
@@ -155,6 +173,34 @@ import "../assets/js/zmap.js";
 import moment from "moment";
 import axios from "axios";
 import VueCropper from "vue-cropper";
+const infoWindowTpl = require("./tpl/infoWindowTpl.art");
+const originImgTpl = require("./tpl/originImgTpl.art");
+//tab切换
+window.tab = function(temp) {
+  let $this = $(temp);
+  if (!$this.hasClass("curr")) {
+    let index = $this.data("index");
+    $("#peerImg").toggleClass("hide");
+    $("#fullImg").toggleClass("hide");
+    $("#peerInfoBox").toggleClass("hide");
+    $("#fullInfoBox").toggleClass("hide");
+
+    $this.siblings().removeClass("curr");
+    $this.addClass("curr");
+  }
+};
+//底图展示
+window.originImgShow = function(personFullUrl, followFullUrl) {
+  let data = {
+    personFullUrl,
+    followFullUrl
+  };
+  let tpl = originImgTpl({
+    data: data
+  });
+  $(".originImage").html(tpl);
+  $(".originImageWrap").css("display", "flex");
+};
 export default {
   name: "mainView",
   data() {
@@ -162,6 +208,7 @@ export default {
       zmap: null,
       map: null,
       markersCluster: null,
+      popup: null,
       keyWord: "", //姓名或身份证号
       start: "", //开始时间
       end: "", //结束时间
@@ -174,6 +221,8 @@ export default {
       isShowCropper: false, //是否显示剪裁区域
       loading: false, //loading图展示
       isFirst: true, //是否是第一次加载
+      popPeerList: [], //pop窗口伴随人员数据
+      showPopPeerList: false,
       busName: "",
       busNameOptions: [],
       searchType: "1",
@@ -214,6 +263,11 @@ export default {
     });
   },
   methods: {
+    //关闭底图展示区域
+    colseOriginImage() {
+      $(".originImage").html("");
+      $(".originImageWrap").css("display", "none");
+    },
     //伴随人员列表过滤 重点人
     checkedfilter(list, checked) {
       if (checked) {
@@ -304,7 +358,6 @@ export default {
       });
       this.markersCluster = this.zmap.MarkerClusterer(this.map, [], {
         click: function(beans) {
-          console.log(beans);
           if (self.map.getZoom() == 18 || self.map.getZoom() == 17) {
             if (beans.length > 0) {
               self.getMarkersInfor(beans);
@@ -321,6 +374,26 @@ export default {
       });
       this.map.addLayer(this.markersCluster);
       this.init();
+    },
+    //当地图层级缩放到最大时，展示对应的pop窗口
+    getMarkersInfor(markers) {
+      let peersSourceArr = [];
+      markers.forEach(item => {
+        peersSourceArr.push(item.data);
+      });
+      this.popPeerList = peersSourceArr;
+      this.showPopPeerList = true;
+    },
+    //关闭对应的pop窗口
+    closePopList() {
+      this.showPopPeerList = false;
+    },
+    //展示对应pop
+    popPeerClick(item) {
+      console.log(item);
+      this.showPopPeerList = false;
+      this.setCenter(item);
+      this.openInfo(item);
     },
     //初始化
     init() {
@@ -407,6 +480,9 @@ export default {
     },
     //搜索
     search() {
+      if (this.popup != null) {
+        this.map.removeInfoWindow(this.popup);
+      }
       this.pageNo = 1;
       this.followPersonQuery();
     },
@@ -414,9 +490,13 @@ export default {
     showMarkers() {
       this.markersCluster.clearMarkers(); //清除所有marker
       let self = this;
-      this.personlist.forEach(element => {
-        element.peerList.forEach(item => {
-          self.addMarker(item);
+      this.personlist.forEach((element, index) => {
+        element.peerList.forEach((item, index2) => {
+          if (index == 0 && index2 == 0) {
+            let location = JSON.parse(item.location);
+            self.map.setCenter([location.longitude, location.latitude]);
+          }
+          self.addMarker(item, element.personName, element.personType);
         });
       });
     },
@@ -446,33 +526,66 @@ export default {
       this.map.zoomToBounds([minLon, minLat], [maxLon, maxLat]);
     },
     //添加单个marker
-    addMarker(item) {
+    addMarker(item, personName, personType) {
       let self = this;
       let location = JSON.parse(item.location);
       let position = [location.longitude, location.latitude];
+      item.personName = personName;
+      item.personType = personType;
       let marker = self.zmap.Marker([position[0], position[1]], {
         content:
           '<img src="' +
           require("../assets/image/car.png") +
           '" style="width: 28px; height: 30px;">',
         offset: {
-          x: -14,
+          x: 0,
           y: -30
         },
-        // infoWindow: self.zmap.InfoWindow(self.map, {
-        //   content: infoWindowTpl({
-        //     data: item
-        //   }),
-        //   closeBox: true
-        // }),
         data: item
       });
+      marker.on("click", this.markerClick);
       // self.markers.push(marker);
       // if (hasFollowId && i == 0) {
       //   //点击某个伴随统计，显示信息框
       //   self.openInfo(item);
       // }
       self.markersCluster.addMarker(marker);
+    },
+    //单个marker点击事件
+    markerClick(data) {
+      this.openInfo(data.data);
+    },
+    //伴随人员列表点击
+    peerItemClick(id) {
+      let self = this;
+      this.markersCluster.getMarkers().forEach(item => {
+        if (item.data.data.id == id) {
+          self.setCenter(item.data.data);
+          self.openInfo(item.data.data);
+        }
+      });
+    },
+    //设置地图中心点
+    setCenter(item) {
+      let location = JSON.parse(item.location);
+      this.map.setZoom(17);
+      this.map.setCenter([location.longitude, location.latitude]);
+    },
+    //在指定位置打开信息窗体
+    openInfo(item) {
+      let location = JSON.parse(item.location);
+      if (this.popup != null) {
+        this.map.removeInfoWindow(this.popup);
+      }
+      // this.popup = new FHMap.Popup({ contentHTML: infoWindowTpl({ data: item }), lonlat: new FHMap.LonLat(location.longitude, location.latitude), autoSize: true, closeBox: true });
+      // this.map.addPopup(this.popup);
+      this.popup = this.zmap.InfoWindow(this.map, {
+        position: [location.longitude, location.latitude],
+        content: infoWindowTpl({
+          data: item
+        })
+      });
+      this.popup.show();
     }
   },
   computed: {
@@ -490,33 +603,6 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-::-webkit-scrollbar {
-  width: 8px;
-  background-color: white;
-}
-
-/*定义滚动条轨道 内阴影+圆角*/
-::-webkit-scrollbar-track {
-  border-radius: 10px;
-  background-color: white;
-}
-
-/*定义滑块 内阴影+圆角*/
-::-webkit-scrollbar-thumb {
-  border-radius: 10px;
-  background-color: #d4d5d5;
-}
-.hide {
-  display: none;
-}
-.show {
-  display: block;
-}
-ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
 .mainView {
   width: 100%;
   height: 100%;
@@ -646,7 +732,7 @@ ul {
               flex-direction: row;
               align-items: center;
               cursor: pointer;
-              &:active {
+              &:hover {
                 background: #edf2fc;
               }
               .person-img {
@@ -727,12 +813,13 @@ ul {
                   flex-direction: row;
                   align-items: center;
                   margin: 10px 0;
+                  cursor: pointer;
                   &:last-child {
                     margin: 10px 0 0 0;
                   }
                   .peerimg {
-                    width: 20px;
-                    height: 20px;
+                    width: 30px;
+                    height: 30px;
                     margin-right: 10px;
                   }
                   .peername {
@@ -806,9 +893,220 @@ ul {
       justify-content: center;
     }
   }
+  .originImageWrap {
+    display: none;
+    position: absolute;
+    z-index: 5008;
+    background-color: rgba(0, 0, 0, 0.5);
+    width: 100%;
+    height: 100%;
+    justify-content: center;
+    align-items: center;
+    top: 0px;
+    .originImage {
+      display: flex;
+      img {
+        height: 320px;
+        width: auto;
+        margin: 0px 10px;
+        display: block;
+        border-radius: 4px;
+      }
+    }
+    .close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 30px;
+      height: 30px;
+    }
+  }
+  .dialogWrap {
+    display: none;
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 6000;
+    top: 0;
+    .dialog {
+      border: 1px solid #c5c5c5;
+      border-radius: 6px;
+      background: #ffffff;
+      color: #333333;
+      padding: 0.2em;
+      box-shadow: 0 0 10px rgba(189, 189, 189, 0.4);
+      display: block;
+      z-index: 10006;
+      outline: 0px;
+      position: absolute;
+      height: auto;
+      width: 339px;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      // top: 0;
+      // left: 0;
+      // right: 0;
+      // bottom: 0;
+      // margin: auto;
+      .ui-dialog-titlebar {
+        position: relative;
+        border-radius: 3px;
+        border: 1px solid #dddddd;
+        background: #e9e9e9;
+        color: #333333;
+        font-weight: bold;
+        width: 325px;
+        margin-left: 2px;
+        height: 34px;
+        .ui-dialog-title {
+          line-height: 34px;
+          margin-left: 14px;
+          font-size: 14px;
+          white-space: nowrap;
+          width: 90%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .ui-dialog-titlebar-close {
+          width: 14px;
+          height: 14px;
+          background: url("../assets/image/close.png") no-repeat;
+          background-size: 100% 100%;
+          position: absolute;
+          right: 0.3em;
+          top: 50%;
+          margin: -7px 0 0 0;
+          cursor: pointer;
+        }
+      }
+      .ui-dialog-content {
+        width: 100%;
+        min-height: 98.6px;
+        max-height: 255px;
+        height: auto;
+        position: relative;
+        border: 0;
+        padding: 5px;
+        background: none;
+        overflow: auto;
+        font-size: 16px;
+        color: #333333;
+        .mouseon {
+          cursor: pointer;
+          border: 1px solid #ccc;
+          width: 70px;
+          height: 75px;
+          border-radius: 4px;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          font-size: 0;
+          margin: 4px;
+          float: left;
+          &:hover {
+            border: 1px solid #ff0b03;
+          }
+          img {
+            justify-content: center;
+            align-items: center;
+            max-width: 66px !important;
+            max-height: 71px !important;
+          }
+        }
+      }
+    }
+  }
+}
+::-webkit-scrollbar {
+  width: 8px;
+  background-color: white;
+}
+
+/*定义滚动条轨道 内阴影+圆角*/
+::-webkit-scrollbar-track {
+  border-radius: 10px;
+  background-color: white;
+}
+
+/*定义滑块 内阴影+圆角*/
+::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-color: #d4d5d5;
+}
+.hide {
+  display: none;
+}
+.show {
+  display: block !important;
+}
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 </style>
-<style>
+<style lang="scss">
+.inforBox {
+  width: 360px;
+  height: 320.5px;
+  position: relative;
+  .hide {
+    display: none;
+  }
+  .headImg {
+    width: 100%;
+  }
+  .infoBox {
+    padding: 20px;
+    .row {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      .left {
+        color: #a2aabb;
+      }
+      .name {
+        color: #2985f7;
+      }
+      .important {
+        font-size: 12px;
+        color: #fa5555;
+        background: #feeeee;
+        padding: 2px 10px;
+        border-radius: 10px;
+        margin-left: 10px;
+      }
+      .location {
+        flex: 1;
+        text-align: right;
+      }
+    }
+  }
+  .myTab {
+    position: absolute;
+    width: 180px;
+    height: 40px;
+    top: 163px;
+    left: 0;
+    background: white;
+    display: flex;
+    .tabItem {
+      flex: 1;
+      text-align: center;
+      line-height: 40px;
+      border-bottom: 1px solid #d4d5d5;
+      &:first-child {
+        border-right: 1px solid #d4d5d5;
+      }
+    }
+    .curr {
+      border-bottom: 0;
+      color: #2985f7;
+    }
+  }
+}
 .el-icon-time {
   display: none;
 }
@@ -830,7 +1128,12 @@ ul {
 .el-select .el-input.is-focus .el-input__inner {
   border-color: #dcdfe6;
 }
+.ol-popup-closer {
+  color: white !important;
+}
 </style>
+
+
 
 
 

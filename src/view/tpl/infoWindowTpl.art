@@ -1,0 +1,64 @@
+<div class="inforBox" style="font-size:14px;">
+    <img class="headImg" src="{{data.peersFullImageUri}}" id="peerImg" onClick="originImgShow('{{data.fullImageUri}}','{{data.peersFullImageUri}}')">
+    <img class="headImg hide" src="{{data.fullImageUri}}" id="fullImg" onClick="originImgShow('{{data.fullImageUri}}','{{data.peersFullImageUri}}')">
+    <div class="infoBox" id="peerInfoBox">
+        <div class="row">
+            <div class="left">姓名：</div>
+            {{if data.peersPersonName}}
+            <div class="name">{{data.peersPersonName}}</div>
+            {{else}}
+            <div class="noName">未识别</div>
+            {{/if}}
+            {{if data.peersPersonType == 'criminal'}}
+            <div class="important">重点人</div>
+            {{/if}}
+            <div class="location">
+            <img src="../../assets/image/location.png" >
+            </div>
+        </div>
+        <div class="row">
+            <div class="left">公交：</div>
+            <div class="right">{{data.groupName}}</div>
+        </div>
+        <div class="row">
+            <div class="left">时间：</div>
+            <div class="right">{{data.peersUploadDate}}</div>
+        </div>
+        <div class="row">
+            <div class="left">地点：</div>
+            <div class="right">{{data.peersAddress}}</div>
+        </div>
+    </div>
+    <div class="infoBox hide"  id="fullInfoBox">
+        <div class="row">
+            <div class="left">姓名：</div>
+            {{if data.personName}}
+            <div class="name">{{data.personName}}</div>
+            {{else}}
+            <div class="noName">未识别</div>
+            {{/if}}
+            {{if data.personType == 'criminal'}}
+            <div class="important">重点人</div>
+            {{/if}}
+            <div class="location">
+            <img src="../../assets/image/location.png" >
+            </div>
+        </div>
+        <div class="row">
+            <div class="left">公交：</div>
+            <div class="right">{{data.groupName}}</div>
+        </div>
+        <div class="row">
+            <div class="left">时间：</div>
+            <div class="right">{{data.uploadDate}}</div>
+        </div>
+        <div class="row">
+            <div class="left">地点：</div>
+            <div class="right">{{data.address}}</div>
+        </div>
+    </div>
+    <div class="myTab">
+        <div class="tabItem curr" data-index=1 onClick="tab(this)">伴随人</div>
+        <div class="tabItem" data-index=2 onClick="tab(this)">乘车人</div>
+    </div>
+</div>
