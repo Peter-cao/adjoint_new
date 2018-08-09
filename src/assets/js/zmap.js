@@ -153,8 +153,9 @@ var Z = (function(){
 	}
 	Z.prototype.Track = function(){
 		var map = arguments[0],
-			opt = arguments[1];
-		return this.factory.Track(map,opt);
+			points = arguments[1],
+			opt = arguments[2];
+		return this.factory.Track(map,points,opt);
 	}
 	Z.prototype.Geocoder = function(){
 		var opt = arguments[0];
@@ -237,8 +238,8 @@ var G_Map = (function(){
 	G_Map.prototype.Toolbar = function(map,opt){
 		return new Toolbar_G(map,opt);
 	}
-	G_Map.prototype.Track = function(map,opt){
-		return new Track_G(map,opt);
+	G_Map.prototype.Track = function(map,points,opt){
+		return new Track_G(map,points,opt);
 	}
 	G_Map.prototype.Geocoder = function(opt){
 		return new Geocoder_G(opt);
@@ -323,6 +324,9 @@ var Map_G = G_Map.Map = (function(){
 	Map.prototype.removeInfoWindow = function(infoWindow){
 		this._instance.remove(infoWindow._instance);
 	}
+	Map.prototype.moveTo = function(lonlat){
+		this._instance.panTo(lonlat)
+	}
 	return Map;
 }())
 var Marker_G = G_Map.Marker = (function(){
@@ -354,9 +358,9 @@ var Marker_G = G_Map.Marker = (function(){
 			if(opt.icon) return;
 			this.setContent(opt.content);
 		}
-		this.data = this._instance.data = options.data ? {"position":lonlat,"data":options.data}:{"position":lonlat};
-		if(opt && opt.events){
-			// console.log(opt.events)
+		// this.data = this._instance.data = options.data ? {"position":lonlat,"data":options.data}:{"position":lonlat};
+		this.setData(opt&&opt.data ? opt.data : null)
+		/*if(opt && opt.events){
 			var events = opt.events;
 			for(var eventName in events){
 				var func = events[eventName];
@@ -364,13 +368,18 @@ var Marker_G = G_Map.Marker = (function(){
 					func && func(e.target.data)
 				})
 			}
-		}
+		}*/
 	}
 	Marker.prototype.on = function(eventName, handler){
 		if(!eventName || !handler) return;
 		var self = this;
 		this._instance.on(eventName, function(e){
-			handler(e.target.data,e)
+			// handler(e.target.data,e)
+			var data = {
+				"position":self.getPosition(),
+				"data":self.getData()
+			}
+			handler && handler.call(self,data)
 		})
 	}
 	Marker.prototype.off = function(eventName, handler){
@@ -384,6 +393,13 @@ var Marker_G = G_Map.Marker = (function(){
 	}
 	Marker.prototype.getIcon = function(){
 		return this._instance.getIcon()
+	}
+	Marker.prototype.setData = function(data){
+		var data = data||null;
+		this.data = this._instance.data = data;
+	}
+	Marker.prototype.getData = function(data){
+		return this.data;
 	}
 	Marker.prototype.setContent = function(content){
 		this._instance.setContent(content)
@@ -417,6 +433,72 @@ var Marker_G = G_Map.Marker = (function(){
 	}
 	Marker.prototype.hideInfoWindow = function(){
 		this.infoWindow.hide();
+	}
+
+	Marker.prototype.moveTo = function(map,lonlat,opt){
+		if(!lonlat) return;
+		if(this.isMoving){
+			console.log("The Marker is isMoving,wait!")
+			return;
+		}
+		var self = this;
+		self.isMoving = true;
+		var marker = this._instance;
+		var map = map._instance;
+		var startPoint = this.getPosition();
+		var endPoint = lonlat;
+		var defaultOpts = {
+			mapFollow:false,
+			beforeMove:function(){},
+			afterMove:function(){}
+		}
+		var options = $.extend({},defaultOpts,opt);
+		var points = [];
+		AMap.plugin(["AMap.Driving"], function() {
+			var drivingOption = {
+                map:map,
+                hideMarkers:true,
+                showTraffic:false
+            };
+			var transfer = new AMap.Driving(); //构造驾车导航类
+			transfer.search(startPoint,endPoint,function(status,result){
+				// console.log(result)
+				if(status === "complete"){
+					if(result && result.routes && result.routes.length>0){
+						var route = result.routes[0];
+						var steps = route.steps || [];
+						steps.forEach(function(item){
+							points = points.concat(item.path)
+						})
+						startMove()
+					}
+					
+				}
+			})
+
+		});
+		var move = function(point){
+			marker.setPosition(point)
+			if(options.mapFollow) map.panTo(point);
+        	// map.moveTo(point);
+		}
+		var startMove = function(){
+			var moveIndex = 0;
+			options.beforeMove && options.beforeMove(startPoint,endPoint);
+			var timer = setInterval(function(){
+				if(moveIndex == points.length){
+					clearInterval(timer);
+					self.isMoving = false;
+					options.afterMove && options.afterMove(startPoint,endPoint);
+					return;
+				} 
+				var point = points[moveIndex++];
+				move(point)
+				// self.setPosition([point.getLng(),point.getLat()])
+			},200)
+		}
+		return this;
+
 	}
 	
 	return Marker;
@@ -466,12 +548,12 @@ var InfoWindow_G = G_Map.InfoWindow = (function(){
 var Icon_G = G_Map.Icon = (function(){
 
 	function Icon(opt){
-		this._instance = new AMap.Icon({
-			image:opt.image,
-			size:opt&&opt.size ? new AMap.Size(opt.size.w,opt.size.h) : null,
-			// imageOffset:opt&&opt.offset ? new AMap.Pixel(opt.offset.x,opt.offset.y) : null,
-			imageSize:opt&&opt.size ? new AMap.Size(opt.size.w,opt.size.h) : null
-		})
+		var options = {
+			image:opt.image
+		}
+		opt&&opt.size ? options.size = new AMap.Size(opt.size.w,opt.size.h) : null
+		opt&&opt.size ? options.imageSize = new AMap.Size(opt.size.w,opt.size.h) : null
+		this._instance = new AMap.Icon(options)
 	}
 
 	return Icon;
@@ -610,7 +692,13 @@ var MarkerClusterer_G = G_Map.MarkerClusterer = (function(){
 		    	console.log("聚合点信息",res)
 		    	var resData = [];
 		    	res.markers.forEach(function(marker){
-		    		resData.push(marker.data)
+		    		// console.log(marker.getPosition())
+		    		var point = marker.getPosition();
+		    		var data = {
+						"position":[point.getLng(),point.getLat()],
+						"data":marker.data
+					}
+		    		resData.push(data)
 		    	})
 		    	opt.click && opt.click(resData)
 		    })
@@ -678,34 +766,109 @@ var Toolbar_G = G_Map.Toolbar = (function(){
 		var _map = map._instance;
 		var self = this;
 		this.overlays = [];
+		this.map = map;
 		this._type = "";
+		var defaultOpts = {
+			drawingTypes : ["marker","circle","polyline","polygon","rectangle"],
+			drawEnd: $.noop()
+		}
+		var options = $.extend({},defaultOpts,opt||{})
 		_map.plugin(["AMap.MouseTool"],function(){ 
 		    var mousetool = self.mousetool = new AMap.MouseTool(_map);
+		    loadHtml.call(self,options.drawingTypes)
 		    mousetool.on('draw', function(data) {
+		    	var overlay = data.obj;
+		    	var type = self._type;
 		    	this.close();
-		    	console.log(data);
-				if(typeof opt === "function"){
-					var overlay = data.obj;
-					self.overlays.push(overlay)
-					var type = "";
-					/*switch (overlay.CLASS_NAME){
-						case "AMap.Marker":
-							type = "marker";
-							break;
-						case "AMap.Polyline":
-							type = "polyline";
-							break;
-						case "AMap.Polygon":
-							type = "polygon";
-							break;
-						case "AMap.Circle":
-							type = "circle";
-							break;
-					}*/
-					opt.call(self,self._type,overlay)
-				}
+		    	$(".ZMap_Toolbar .ZMap_box").removeClass("active")
+		    	if(type == "polyline" || type == "polygon"){
+		    		AMap.plugin(["AMap.PolyEditor"],function(){
+				        var editor = new AMap.PolyEditor(_map,overlay); 
+				        editor.open();
+				        overlay.editor = editor;
+			    	});	
+		    	}else if(type == "circle"){
+		    		AMap.plugin(["AMap.CircleEditor"],function(){
+				        var editor = new AMap.CircleEditor(_map,overlay); 
+				        editor.open(); 
+				        overlay.editor = editor;
+			    	});	
+		    	}/*else if(type == "rectangle"){
+		    		AMap.plugin(["AMap.RectangleEditor"],function(){
+				        var editor = new AMap.RectangleEditor(_map,overlay); 
+				        editor.open(); 
+			    	});	
+		    	}*/
+		    	self._addContextMenu(overlay)
+				// if(options.drawEnd){
+					// self.overlays.push(overlay)
+					options.drawEnd && options.drawEnd.call(self,type,overlay)
+				// }
 			});
 		});
+		function loadHtml(drawingTypes){
+			console.log(drawingTypes)
+			var panelHtml = [];
+			drawingTypes.forEach(function(type){
+				var titles = {"marker":"画点","circle":"画圆","polyline":"画折线","polygon":"画多边形","rectangle":"画矩形",}
+				panelHtml.push('<a class="ZMap_box ZMap_'+type+'" drawingtype="'+type+'" href="javascript:void(0)" title="'+titles[type]+'" onfocus="this.blur()"></a>',)
+			})
+			var html = [
+				'<div class="ZMap_Toolbar" style="position: absolute; z-index: 10; text-size-adjust: none; bottom: auto; right: 5px; top: 5px; left: auto;">',
+					'<div class="ZMap_Drawing_panel">',panelHtml.join(""),
+						// '<a class="ZMap_box ZMap_hander" drawingtype="" href="javascript:void(0)" title="拖动地图" onfocus="this.blur()"></a>',
+						// '<a class="ZMap_box ZMap_marker" drawingtype="marker" href="javascript:void(0)" title="画点" onfocus="this.blur()"></a>',
+						// '<a class="ZMap_box ZMap_circle" drawingtype="circle" href="javascript:void(0)" title="画圆" onfocus="this.blur()"></a>',
+						// '<a class="ZMap_box ZMap_polyline" drawingtype="polyline" href="javascript:void(0)" title="画折线" onfocus="this.blur()"></a>',
+						// '<a class="ZMap_box ZMap_polygon" drawingtype="polygon" href="javascript:void(0)" title="画多边形" onfocus="this.blur()"></a>',
+						// '<a class="ZMap_box ZMap_rectangle" drawingtype="rectangle" href="javascript:void(0)" title="画矩形" onfocus="this.blur()"></a>',
+					'</div>',
+				'</div>'
+			];
+			$(".amap-container").append(html.join(""));
+			var styleCode = [
+				'.ZMap_Drawing_panel {height: 47px;border: 1px solid #666;border-radius: 5px;overflow: hidden;box-shadow: 1px 1px 3px rgba(0,0,0,0.3);float: left;}',
+				'.ZMap_Toolbar .ZMap_box {border-right: 1px solid #d2d2d2;float: left;height: 100%;width: 64px;height: 100%;background-image: url(http:\/\/api.map.baidu.com/library/DrawingManager/1.4/src/bg_drawing_tool.png);cursor: pointer;}',
+				'.ZMap_Toolbar .ZMap_hander {background-position: 0 0;}',
+				'.ZMap_Toolbar .ZMap_marker {background-position: -65px 0;}',
+				'.ZMap_Toolbar .ZMap_circle {background-position: -130px 0;}',
+				'.ZMap_Toolbar .ZMap_polyline {background-position: -195px 0;}',
+				'.ZMap_Toolbar .ZMap_polygon {background-position: -260px 0;}',
+				'.ZMap_Toolbar .ZMap_rectangle {background-position: -325px 0;}',
+				'.ZMap_Toolbar .ZMap_hander.active {background-position: 0 -52px;}',
+				'.ZMap_Toolbar .ZMap_marker.active {background-position: -65px -52px;}',
+				'.ZMap_Toolbar .ZMap_circle.active {background-position: -130px -52px;}',
+				'.ZMap_Toolbar .ZMap_polyline.active {background-position: -195px -52px;}',
+				'.ZMap_Toolbar .ZMap_polygon.active {background-position: -260px -52px;}',
+				'.ZMap_Toolbar .ZMap_rectangle.active {background-position: -325px -52px;}'
+			]
+			var style = document.createElement('style');
+		    style.type = 'text/css';
+		    style.rel = 'stylesheet';
+		    style.appendChild(document.createTextNode(styleCode.join("")));
+		    var head = document.getElementsByTagName('head')[0];
+    		head.appendChild(style);
+    		var self = this;
+    		$(".ZMap_Toolbar").on("click",".ZMap_box",function(){
+    			$(this).addClass("active").siblings().removeClass("active");
+    			var type = $(this).attr("drawingtype");
+    			type && self.mousetool[type]()
+    			// if(type == "rectangle") type = "polygon"//高德地图bug
+    			self._type = (type == "rectangle" ? "polygon" : type);
+    		})
+		}
+	}
+	Toolbar.prototype._addContextMenu = function(layer){
+		var self = this;
+		var _map = self.map._instance;
+		var contextMenu = new AMap.ContextMenu();
+	    contextMenu.addItem("删除", function() {
+	        _map.remove([layer])
+	        layer.editor && layer.editor.close()
+	    }, 0);
+        layer.on('rightclick', function(e) {
+	        contextMenu.open(_map, e.lnglat);
+	    });
 	}
 	Toolbar.prototype.marker = function(){
 		this._type = "marker";
@@ -731,18 +894,37 @@ var Toolbar_G = G_Map.Toolbar = (function(){
 }())
 
 var Track_G = G_Map.Track = (function(){
-	function Track(map,opt){
+	function Track(map,points,opt){
 		var self = this;
-		loadAMapUI().then(function(){
-			AMapUI.load(['ui/misc/PathSimplifier'], function(PathSimplifier) {
-				if (!PathSimplifier.supportCanvas) {
-			        alert('当前环境不支持 Canvas！');
-			        return;
-			    }
-			    //启动页面
-			    self._initPage(map._instance,PathSimplifier,opt);
-			});
-		})
+		var defaultOpts = {
+			play:false,
+			strokeColor:"red",
+			strokeWeight:2
+		}
+		var options = $.extend({},defaultOpts,opt);
+		this.map = map;
+		this.options = options;
+		this.options.strokeWidth = options.strokeWeight;
+		if(options.play){
+			loadAMapUI().then(function(){
+				AMapUI.load(['ui/misc/PathSimplifier'], function(PathSimplifier) {
+					if (!PathSimplifier.supportCanvas) {
+				        alert('当前环境不支持 Canvas！');
+				        return;
+				    }
+				    //启动页面
+				    self._initPage(map._instance,PathSimplifier,points);
+				});
+			})
+		}else{//点线组成
+			if(points && points.length>0){
+				this._markers = null;
+				this._polyline = null;
+				this.setPoint(points)
+			}
+		}
+		
+		
 	}
 	function loadAMapUI(){
 		var def = $.Deferred();
@@ -756,7 +938,7 @@ var Track_G = G_Map.Track = (function(){
 		}
 		return def;
 	}
-	Track.prototype._initPage = function(map,PathSimplifier,opt){
+	Track.prototype._initPage = function(map,PathSimplifier,points){
 	    //创建组件实例
 	    var pathSimplifierIns = this._instance = new PathSimplifier({
 	        zIndex: 100,
@@ -783,10 +965,12 @@ var Track_G = G_Map.Track = (function(){
 	            }
 	        }
 	    });
-
+	    var path = points.map(function(item){
+			return item.getPosition()
+		})
 	    pathSimplifierIns.setData([{
 	        name: '轨迹',
-	        path: opt.path
+	        path: path
 	    }]);
 
 	    //创建一个巡航器
@@ -795,8 +979,34 @@ var Track_G = G_Map.Track = (function(){
 	            loop: false, //循环播放
 	            speed: 1000
 	        });
-
-	    
+	}
+	Track.prototype.setPoint = function(points){
+		this.points = points.map(function(item){
+			return item._instance
+		})
+	}
+	Track.prototype.show = function(){
+		var self = this;
+		this.hide();
+		var points = this.points;
+		var map = this.map._instance;
+		var path = points.map(function(item){
+			return item.getPosition()
+		})
+		var polyline = new AMap.Polyline({
+			path:path,
+			strokeColor: self.options.strokeColor,
+			strokeWeight: self.options.strokeWeight
+		})
+		map.add(points);
+		map.add(polyline);
+		this._markers = points;
+		this._polyline = polyline;
+	}
+	Track.prototype.hide = function(){
+		var map = this.map._instance;
+		if(this._markers) map.remove(this._markers)
+		if(this._polyline) map.remove(this._polyline)
 	}
 	Track.prototype.start = function(){
 		var pathNavigator = this.pathNavigator;
@@ -919,8 +1129,8 @@ var B_Map = (function(){
 	B_Map.prototype.Toolbar = function(map,opt){
 		return new Toolbar_B(map,opt)
 	}
-	B_Map.prototype.Track = function(map,opt){
-		return new Track_B(map,opt)
+	B_Map.prototype.Track = function(map,points,opt){
+		return new Track_B(map,points,opt)
 	}
 	B_Map.prototype.Geocoder = function(opt){
 		return new Geocoder_B(opt);
@@ -1009,20 +1219,23 @@ var Map_B = B_Map.Map = (function(){
 	Map.prototype.removeInfoWindow = function(infoWindow){
 		this._instance.clearInfoWindow(infoWindow._instance);
 	}
+	Map.prototype.moveTo = function(lonlat){
+		this._instance.panTo(new BMap.Point(lonlat[0], lonlat[1]))
+	}
 	return Map;
 }())
 var Marker_B = B_Map.Marker = (function(){
 	function Marker(lonlat,opt){
 		var defaultOpt = {
-			offset:{width:0,height:0},
+			offset:{x:0,y:0},
 		}
 		var options = $.extend({
 		},defaultOpt,opt,true);
 
-		(options.offset.x&&options.offset.y) ? options.offset = {width:options.offset.x,height:options.offset.y} : null;
-		console.log(options)
+		options.offset = {width:options.offset.x,height:options.offset.y};
 
-		var marker = this._instance = new BMap.Marker(new BMap.Point(lonlat[0], lonlat[1]),options)
+		var marker = this._instance = new BMap.Marker(new BMap.Point(lonlat[0], lonlat[1]),options);
+		this.setContent(opt.content)
 		if(opt && opt.icon){
 			this._instance.setIcon(opt.icon._instance)
 		}
@@ -1039,8 +1252,9 @@ var Marker_B = B_Map.Marker = (function(){
 				
 			}).bind(this))
 		}
-		this.data = this._instance.data = options.data ? {"position":lonlat,"data":options.data}:{"position":lonlat};
-		if(opt && opt.events){
+		// this.data = this._instance.data = options.data ? {"position":lonlat,"data":options.data}:{"position":lonlat};
+		this.setData(opt&&opt.data ? opt.data : null);
+		/*if(opt && opt.events){
 			var events = opt.events;
 			for(var eventName in events){
 				var func = events[eventName];
@@ -1048,13 +1262,18 @@ var Marker_B = B_Map.Marker = (function(){
 					func && func(e.currentTarget.data)
 				})
 			}
-		}
+		}*/
 	}
 	Marker.prototype.on = function(eventName, handler){
 		if(!eventName || !handler) return;
 		var self = this;
 		this._instance.addEventListener(eventName, function(e){
-			handler(e.target.data,e)
+			// handler(e.target.data,e)
+			var data = {
+				"position":self.getPosition(),
+				"data":self.getData()
+			}
+			handler && handler.call(self,data)
 		})
 	}
 	Marker.prototype.off = function(eventName, handler){
@@ -1069,8 +1288,16 @@ var Marker_B = B_Map.Marker = (function(){
 	Marker.prototype.getIcon = function(){
 		return this._instance.getIcon()
 	}
+	Marker.prototype.setData = function(data){
+		var data = data||null;
+		this.data = this._instance.data = data;
+	}
+	Marker.prototype.getData = function(data){
+		return this.data;
+	}
 	Marker.prototype.setContent = function(content){
 		// this._instance.setContent(content)
+		this.setLabel(content)
 	}
 	Marker.prototype.setPosition = function(lonlat){
 		this._instance.setPosition(new BMap.Point(lonlat[0], lonlat[1]));
@@ -1090,6 +1317,7 @@ var Marker_B = B_Map.Marker = (function(){
 	}
 	Marker.prototype.setLabel = function(str,labelOpts){
 		if(!str) return;
+		labelOpts = labelOpts || {};
 		var label = this._instance.getLabel();
         var defaultStyle = {
             border: '1px solid blue',
@@ -1112,6 +1340,9 @@ var Marker_B = B_Map.Marker = (function(){
 	}
 	Marker.prototype.hideInfoWindow = function(){
 		this.infoWindow.hide();
+	}
+	Marker.prototype.moveTo = function(map,lonlat,opt){
+
 	}
 	return Marker;
 }())
@@ -1304,7 +1535,12 @@ var MarkerClusterer_B = B_Map.MarkerClusterer = (function(){
 			console.log("聚合点信息",res)
 			var resData = [];
 			res.forEach(function(marker){
-	    		resData.push(marker.data)
+				var point = marker.getPosition();
+	    		var data = {
+					"position":[point.lng,point.lat],
+					"data":marker.data
+				}
+	    		resData.push(data)
 	    	})
 	    	console.log(resData)
 		})
@@ -1462,7 +1698,7 @@ var Toolbar_B = B_Map.Toolbar = (function(){
 	return Toolbar;
 }())
 var Track_B = B_Map.Track = (function(){
-	function Track(map,opt){
+	function Track(map,points,opt){
 		var self = this;
 		if(!opt.path) return;
 		loadLushu().then(function(){
@@ -1587,8 +1823,8 @@ var FH_Map = (function(){
 	FH_Map.prototype.Toolbar = function(map,opt){
 		return new Toolbar(map,opt);
 	}
-	FH_Map.prototype.Track = function(map,opt){
-		return new Track(map,opt);
+	FH_Map.prototype.Track = function(map,points,opt){
+		return new Track(map,points,opt);
 	}
 	FH_Map.prototype.Geocoder = function(opt){
 		return new Geocoder(opt);
@@ -1620,7 +1856,7 @@ var Map = FH_Map.Map = (function(){
 		this._instance = new FHMap.Map(opt.container,{
 			zoom: opt.zoom, 
 			center: new FHMap.LonLat(opt.center[0],opt.center[1]),
-			//selected:"baidu.sate"//["baidu.map","baidu.sate","baidu.sate_road"]
+			// selected:"baidu.sate"//["baidu.map","baidu.sate","baidu.sate_road"]
 		});
 	}
 	Map.prototype.addLayer = function(layer){
@@ -1719,6 +1955,9 @@ var Map = FH_Map.Map = (function(){
 		var bounds = new FHMap.Bounds(southWest[0],southWest[1],northEast[0],northEast[1]);
 		this._instance.zoomToBounds(bounds)
 	}
+	Map.prototype.moveTo = function(lonlat){
+		this._instance.moveTo(new FHMap.LonLat(lonlat[0], lonlat[1]))
+	}
 	return Map;
 }());
 var Marker = FH_Map.Marker = (function(){
@@ -1740,9 +1979,9 @@ var Marker = FH_Map.Marker = (function(){
 			if(opt.icon) return;
 			this.setContent(opt.content);
 		}
-		this.data = this._instance.data = opt&&opt.data ? {"position":Lonlat,"data":opt.data}:{"position":Lonlat};
-
-		if(opt && opt.events){
+		// this.data = this._instance.data = opt&&opt.data ? {"position":Lonlat,"data":opt.data}:{"position":Lonlat};
+		this.setData(opt&&opt.data ? opt.data : null)
+		/*if(opt && opt.events){
 			var events = opt.events;
 			for(var eventName in events){
 				var func = events[eventName];
@@ -1750,7 +1989,7 @@ var Marker = FH_Map.Marker = (function(){
 					func && func(res.object.data)
 				})
 			}
-		}
+		}*/
 		
 	}
 	Marker.prototype.on = function(eventName, handler){
@@ -1758,11 +1997,23 @@ var Marker = FH_Map.Marker = (function(){
 		var self = this;
 		var marker = this._instance;
 		marker.events.register(eventName,marker,function(res){
-			// handler(res.object.data)
-			handler && handler.call(self,res.object.data)
+			// handler && handler.call(self,res.object.data)
+			console.log("event")
+			var data = {
+				"position":self.getPosition(),
+				"data":self.getData()
+			}
+			handler && handler.call(self,data)
 		})
 	}
 	Marker.prototype.off = function(eventName, handler){
+	}
+	Marker.prototype.setData = function(data){
+		var data = data||null;
+		this.data = this._instance.data = data;
+	}
+	Marker.prototype.getData = function(data){
+		return this.data;
 	}
 	Marker.prototype.setIcon = function(icon){
 		this._instance.setIcon(icon._instance)
@@ -1770,9 +2021,9 @@ var Marker = FH_Map.Marker = (function(){
 	Marker.prototype.getIcon = function(){
 		return this._instance.icon
 	}
-	Marker.prototype.setContent = function(content){
+	Marker.prototype.setContent = function(content,flag){
 		var offset = this.offset;
-		this._instance.setIcon(new FHMap.Icon(content,offset))
+		this._instance.setIcon(new FHMap.Icon(content,offset),flag)
 	}
 	Marker.prototype.setPosition = function(lonlat){
 		this._instance.moveToCenter(new FHMap.LonLat(lonlat[0],lonlat[1]))
@@ -1785,7 +2036,15 @@ var Marker = FH_Map.Marker = (function(){
 	}
 	Marker.prototype.getPosition = function(){
 		var lonlat = this._instance.lonlat;
-		return [lonlat.srcLon,lonlat.srcLat];
+		var result;
+		if(lonlat.srcLon && lonlat.srcLat){
+			result = [lonlat.srcLon,lonlat.srcLat];
+		}else{
+			var point = FHMap.Coord.mercatorToBd09({x:lonlat.lon,y:lonlat.lat});
+			result = [point.x,point.y];
+		}
+		return result;
+		
 	}
 	Marker.prototype.enableDragging = function(){
 		// var dragFeature =  this.dragFeature = new FHMap.Control.DragFeature(
@@ -1823,6 +2082,58 @@ var Marker = FH_Map.Marker = (function(){
 	}
 	Marker.prototype.hideInfoWindow = function(){
 		this._instance.hidePopup();
+	}
+	Marker.prototype.moveTo = function(map,lonlat,opt){
+		if(!lonlat) return;
+		if(this.isMoving){
+			console.log("The Marker is isMoving,wait!")
+			return;
+		}
+		var self = this;
+		self.isMoving = true;
+		var marker = this._instance;
+		var map = map._instance;
+		var startPoint = this.getPosition();
+		var endPoint = lonlat;
+		var defaultOpts = {
+			mapFollow:false,
+			beforeMove:function(){},
+			afterMove:function(){}
+		}
+		var options = $.extend({},defaultOpts,opt)
+		var len = 10;
+		var points = (function(){
+			return Array(len).fill(0).map(function(item,index){
+				var persent = ((index+1)/len);
+				var lon = startPoint[0]+(endPoint[0]-startPoint[0])*persent;
+				var lat = startPoint[1]+(endPoint[1]-startPoint[1])*persent;
+				var lonlat = new FHMap.LonLat(lon,lat)
+				return lonlat;
+			})
+		}())
+
+		var move = function(point){
+			var px = map.getLayerPxFromLonLat(point);
+			marker.moveTo(px);
+			if(options.mapFollow) map.moveTo(point);
+        	// map.moveTo(point);
+		}
+		var startMove = function(){
+			var moveIndex = 0;
+			options.beforeMove && options.beforeMove(startPoint,endPoint);
+			var timer = setInterval(function(){
+				if(moveIndex == points.length){
+					clearInterval(timer);
+					self.isMoving = false;
+					options.afterMove && options.afterMove(startPoint,endPoint);
+					return;
+				} 
+				move(points[moveIndex++])
+			},200)
+		}
+		startMove();
+		return this;
+
 	}
 	return Marker;
 }());
@@ -2078,7 +2389,12 @@ var MarkerClusterer = FH_Map.MarkerClusterer = (function(){
 						/*if(index == 0){
 							map._instance.setCenter(new FHMap.LonLat(item.data.position[0],item.data.position[1]))
 						}*/
-						resData.push(item.data)
+						// console.log(item)
+						var data = {
+							"position":[item.lonlat.srcLon,item.lonlat.srcLat],
+							"data":item.data
+						}
+						resData.push(data)
 					})
 					opt.click && opt.click(resData)
 				}else{
@@ -2175,7 +2491,6 @@ var Toolbar = FH_Map.Toolbar = (function(){
 		//'point','Line','Rectangle','Circle','Polygon','Clear'
 		var toolBar = new FHMap.Control.Toolbar(layer,['Navigation','Point','Line','Rectangle','Circle','Polygon'],{
 			finishDraw:function(feature){
-				console.log(feature,this)
 				// console.log(this.control.shapeType)
 				var overlay = this;//layer.getFeatures().slice(-1)[0];
 				var type = "";
@@ -2216,7 +2531,7 @@ var Toolbar = FH_Map.Toolbar = (function(){
 	return Toolbar;
 }())
 var Track = FH_Map.Track = (function(){
-	function Track(map,opt){
+	function Track(map,points,opt){
 		var tracksLayer = this._instance = new FHMap.Layer.Tracks("Tracks",{
 			callbacks:{
 				click : function(msg){
@@ -2225,6 +2540,18 @@ var Track = FH_Map.Track = (function(){
 			}
 		});
 		map._instance.addLayer(tracksLayer);
+		var defaultOpts = {
+			play:false,
+			strokeColor:"red",
+			strokeWeight:2
+		}
+		var options = $.extend({},defaultOpts,opt);
+		this.map = map;
+		this.options = options;
+		this.options.strokeWidth = options.strokeWeight;
+		if(points){
+			this.setPoint(points)
+		}
 
 		// tracksLayer.events.on({
 		// 	trackPlaying: function(track){
@@ -2245,96 +2572,41 @@ var Track = FH_Map.Track = (function(){
 		// 	}
 		// })
  
-		// var pointLayer = this.pointLayer = new FHMap.Layer.Vector("pointLayer");
-		// map._instance.addLayer(pointLayer);
-
-		// this.addTrack()
 	}
-	Track.prototype.addTrack = function(){
+	Track.prototype.setPoint = function(points){
+		this.points = points.map(function(item){
+			return item._instance
+		})
+	}
+	Track.prototype.show = function(){
+		var self = this;
 		var tracksLayer = this._instance;
-		var points = [
-			new FHMap.Geometry.Point(118.75260,32.05386),
-			new FHMap.Geometry.Point(118.75844,32.05886),
-			new FHMap.Geometry.Point(118.75844,32.05386),
-			new FHMap.Geometry.Point(118.75944,32.05686)
-		];
- 
-		var fill = new FHMap.Style.Fill('white');
-		//设置曲线样式
-		var style = new FHMap.Style({
-			curve: new FHMap.Style.Curve(40, {
-				text: new FHMap.Style.Text('顺时针曲线', {
-					fontSize: "20px",
-					fontColor: "black"
-				}),
-				textLocation: 0.3
-			}),
-			shape: new FHMap.Style.Shape.Icon('img/mapload_red.png',{
-				width:40,
-				height:38,
-				offsetX:-13,
-				offsetY:-37
-			})
-		});
-		points[0].setStyle(style);
-		//设置点样式为圆形
-		style = new FHMap.Style({
-			fill: new FHMap.Style.Fill('yellow'),
-			stroke: new FHMap.Style.Stroke('blue',2),
-			text: new FHMap.Style.Text('11'),
-			curve: new FHMap.Style.Curve(30,{
-				anticlockwise: true,
-				text: new FHMap.Style.Text('逆时针曲线'),
-				textLocation: 0.3,
-				textRotation: 0
-			}),
-			shape: new FHMap.Style.Shape.Circle(14)
-		});
-		points[1].setStyle(style);
- 
-		//设置实心圆样式
-		style = new FHMap.Style({
-			curve: new FHMap.Style.Curve(0, {
-				text: new FHMap.Style.Text('直线内容', {
-					fontSize: "16px",
-					fontWeight: 'bold'
-				}),
-				textLocation: 0.7
-			}),
-			shape: new FHMap.Style.Shape.Circle(6)
-		});
-		points[2].setStyle(style);
- 
-		//设置白底圆样式
-		style = new FHMap.Style.Shape.Circle(20, {
-			fill: fill,
-			text: new FHMap.Style.Text('内容')
-		});
-		points[3].setStyle(style);
- 
-		var stroke = new FHMap.Style.Stroke('red',2);
-		var track1 = new FHMap.Feature.Track(points,{fid:"line2"},stroke);
-		track1.setArrowHeadStyle(true);
-		tracksLayer.addTrack(track1,{autoZoom:true});		
+		tracksLayer.clearTracks()
+		var points = this.points
+		var track = this.track = new FHMap.Feature.Track(
+			points,
+			{fid:'line'+Math.random()},
+			{
+				strokeColor:self.options.strokeColor,
+				strokeWidth:self.options.strokeWidth,
+				play:{externalGraphic: 'http://webapi.amap.com/theme/v1.3/markers/n/mark_bs.png', graphicWidth: 32, graphicHeight: 32, graphicXOffset: -16 ,graphicYOffset: -18}
+			}
+		);
+		tracksLayer.addTrack(track,{autoZoom:false});	
+	}
+	Track.prototype.hide = function(){
+		var tracksLayer = this._instance;
+		tracksLayer.clearTracks()
 	}
 	Track.prototype.start = function(){
 		var tracksLayer = this._instance;
 		tracksLayer.clearTracks()
-		// var pointLayer = this.pointLayer;
-		// pointLayer.setZIndex(4000)
-		var points = [
-			new FHMap.Marker(new FHMap.LonLat(118.76260,32.05386),new FHMap.Icon(""),new FHMap.Popup({contentHTML:"我是起点"}),{"startTime":"2015-10-12 00:01:00"}),
-			new FHMap.Marker(new FHMap.LonLat(118.75944,32.05686),new FHMap.Icon(""),null,{"startTime":"2015-10-13 00:01:00"}),
-			new FHMap.Marker(new FHMap.LonLat(118.7488532,32.0574768),new FHMap.Icon(""),null,{"startTime":"2015-10-18 00:01:00"}),
-			new FHMap.Marker(new FHMap.LonLat(118.7498532,32.0564768),new FHMap.Icon(""),null,{"startTime":"2015-10-25 00:01:00"}),
-			new FHMap.Marker(new FHMap.LonLat(118.75260,32.05386),new FHMap.Icon(""),null,{"startTime":"2015-10-30 00:01:00"})
-		];
-		var track = this.track = new FHMap.Feature.Track(points,{fid:'line1'+Math.random()},{strokeColor:'blue',play:{externalGraphic: 'img/sign.png', graphicWidth: 32, graphicHeight: 32, graphicXOffset: -16 ,graphicYOffset: -18}});
+		var track = this.track;
 		//播放点和轨迹线需要各自设置层级的时候,需添加一个播放点图层传进去，调用下面方法
 		// tracksLayer.playTrack(track, 0, {dynamic: true,pointLayer:pointLayer,customPlayTime:20,playImageRotation:true});
-		 
+		 // tracksLayer.addTrack(track,{autoZoom:false});	
 		//默认播放点和轨迹线在同一层级上
-		tracksLayer.playTrack(track, 0, {dynamic: true});		
+		tracksLayer.playTrack(track, 0, {dynamic: false});		
 	}
 	Track.prototype.pause = function(){
 		var tracksLayer = this._instance;

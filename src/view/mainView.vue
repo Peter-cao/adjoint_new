@@ -71,7 +71,7 @@
             <div class="list" v-if="personlist.length>0">
               <ul class="personList" ref="personList">
                 <li class="personItem" v-for="(item,index) in personlist" :key="index">
-                  <div class="personInfo">
+                  <div class="personInfo" @mouseenter.self="mouseover(item.pId)" @mouseleave.self="mouseout(item.pId)">
                       <img :src="item.imageUrl" class="person-img">
                       <div class="personText">
                         <div class="row">
@@ -263,6 +263,38 @@ export default {
     });
   },
   methods: {
+    mouseover(pid) {
+      let self = this;
+      let marker_instance = [];
+      this.markersCluster.getMarkers().forEach(item => {
+        marker_instance.push(item._instance);
+        if (item.data.pId == pid) {
+          item.setContent(
+            '<img src="' +
+              require("../assets/image/car-c.png") +
+              '" style="width: 28px; height: 30px;">',
+            false
+          );
+        }
+      });
+      this.markersCluster._instance.displayMarkers(true, marker_instance);
+    },
+    mouseout(pid) {
+      let self = this;
+      let marker_instance = [];
+      this.markersCluster.getMarkers().forEach(item => {
+        marker_instance.push(item._instance);
+        if (item.data.pId == pid) {
+          item.setContent(
+            '<img src="' +
+              require("../assets/image/car.png") +
+              '" style="width: 28px; height: 30px;">',
+            false
+          );
+        }
+      });
+      this.markersCluster._instance.displayMarkers(true, marker_instance);
+    },
     //关闭底图展示区域
     colseOriginImage() {
       $(".originImage").html("");
