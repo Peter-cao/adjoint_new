@@ -12,8 +12,8 @@
             {{if data.peersPersonType == 'criminal'}}
             <div class="important">重点人</div>
             {{/if}}
-            <div class="location">
-            <img src="../../assets/image/location.png" >
+            <div class="location"  >
+            <img src="../../assets/image/location.png" onClick="personTraceMap('{{data.peersPid}}')">
             </div>
         </div>
         <div class="row">
@@ -40,8 +40,8 @@
             {{if data.personType == 'criminal'}}
             <div class="important">重点人</div>
             {{/if}}
-            <div class="location">
-            <img src="../../assets/image/location.png" >
+            <div class="location" >
+            <img src="../../assets/image/location.png" onClick="personTraceMap('{{data.pId}}')">
             </div>
         </div>
         <div class="row">

@@ -79,8 +79,8 @@
                           <div class="cname" v-if="item.personName" @click.stop="openPerson(item.pId)">{{item.personName}}</div>
                           <div class="name" v-else>未识别</div>
                           <div class="important" v-if="item.personType=='criminal'">重点人</div>
-                          <div class="location">
-                            <img src="../assets/image/location.png" >
+                          <div class="location" >
+                            <img src="../assets/image/location.png" @click="personTraceMap(item.pId)">
                           </div>
                         </div>
                         <div class="row">
@@ -168,13 +168,29 @@
 </template>
 
 <script>
-import $ from "jquery";
-import "../assets/js/zmap.js";
 import moment from "moment";
 import axios from "axios";
 import VueCropper from "vue-cropper";
 const infoWindowTpl = require("./tpl/infoWindowTpl.art");
 const originImgTpl = require("./tpl/originImgTpl.art");
+let layer = null;
+layui.use("layer", function() {
+  //独立版的layer无需执行这一句
+  layer = layui.layer; //独立版的layer无需执行这一句
+});
+//人员轨迹
+window.personTraceMap = function(id) {
+  //iframe窗
+  layer.open({
+    type: 2,
+    title: "人员轨迹",
+    shadeClose: true,
+    shade: false,
+    maxmin: true, //开启最大化最小化按钮
+    area: ["1550px", "850px"],
+    content: "/police/person/personDetailTraceMap.action?id=" + id
+  });
+};
 //tab切换
 window.tab = function(temp) {
   let $this = $(temp);
@@ -209,6 +225,7 @@ export default {
       map: null,
       markersCluster: null,
       popup: null,
+      layer: null,
       keyWord: "", //姓名或身份证号
       start: "", //开始时间
       end: "", //结束时间
@@ -591,9 +608,9 @@ export default {
     peerItemClick(id) {
       let self = this;
       this.markersCluster.getMarkers().forEach(item => {
-        if (item.data.data.id == id) {
-          self.setCenter(item.data.data);
-          self.openInfo(item.data.data);
+        if (item.data.id == id) {
+          self.setCenter(item.data);
+          self.openInfo(item.data);
         }
       });
     },
@@ -618,6 +635,9 @@ export default {
         })
       });
       this.popup.show();
+    },
+    personTraceMap(id) {
+      personTraceMap(id);
     }
   },
   computed: {
