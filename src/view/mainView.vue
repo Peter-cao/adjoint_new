@@ -186,7 +186,7 @@
               <div class="row">
                 <div class="item">
                     <div class="left">籍贯：</div>
-                    <div class="right" :title="person.address">{{person.address}}</div>
+                    <div class="right" :title="person.address" style="-webkit-box-orient: vertical;">{{person.address}}</div>
                 </div>
                 <div class="item">
                     <div class="left">年龄：</div>
@@ -196,7 +196,7 @@
               <div class="row">
                 <div class="item">
                     <div class="left">身份类型：</div>
-                    <div class="right" :title="person.tag">{{person.tag}}</div>
+                    <div class="right" :title="person.tag" style="-webkit-box-orient: vertical;">{{person.tag}}</div>
                 </div>
                 <div class="item">
                     <div class="left">电话：</div>
