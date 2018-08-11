@@ -46,15 +46,15 @@
               <img src="../assets/image/time.png" class="time-icon">
             </div>
             <div class="typeBox">
-              <el-select v-model="busName" placeholder="请选择公交" class="select">
+              <el-select v-model="groupId" placeholder="请选择公交" class="select" clearable >
                 <el-option
                   v-for="item in busNameOptions"
                   :key="item.id"
                   :label="item.name"
-                  :value="item.name">
+                  :value="item.id">
                 </el-option>
               </el-select>
-              <el-select v-model="searchType" placeholder="请选择" class="select">
+              <el-select v-model="personType" placeholder="请选择" class="select">
                 <el-option
                   v-for="item in searchTypeOptions"
                   :key="item.value"
@@ -66,7 +66,7 @@
           </div>
           <div class="listBox" v-loading="loading">
             <div class="top" v-if="personlist.length>0">
-              <div class="count">当前乘车伴随记录{{totalCount}}条</div>
+              <div class="count">当前乘车伴随记录{{peersTotalCount}}条</div>
             </div>
             <div class="list" v-if="personlist.length>0">
               <ul class="personList" ref="personList">
@@ -85,7 +85,7 @@
                         </div>
                         <div class="row">
                           <div class="left">最近一次乘车：</div>
-                          <div class="right">25路-5226</div>
+                          <div class="right">{{item.groupName}}</div>
                         </div>
                         <div class="row">
                           <div class="left">最近乘车时间：</div>
@@ -120,7 +120,7 @@
             <div class="paginationBox" v-if="personlist.length>0">
               <el-pagination
                 layout="prev, pager, next"
-                :total="totalCount" :page-size="pageSize" class="pagination" @current-change="pageChange">
+                :total="totalCount" :page-size="pageSize" :current-page="pageNo" class="pagination" @current-change="pageChange">
               </el-pagination>
             </div>
             <div class="noData" v-if="personlist.length==0&&!isFirst">
@@ -162,6 +162,54 @@
                   </div>
                 </div>
             </div>
+        </div>
+        <div class="person" :class="isShowPerson?'show':'hide'">
+          <div class="topBox">
+              <img :src="person.avataruri" class="avataruri">
+              <div class="right">
+                <div class="name">{{person.name}}</div>
+                <div class="idcard">身份证号：{{person.idcard}}</div>
+              </div>
+              <img src="../assets/image/close.png" class="close" @click="closePerson">
+          </div>
+          <div class="bottomBox">
+              <div class="row">
+                <div class="item">
+                    <div class="left">性别：</div>
+                    <div class="right">{{person.gender}}</div>
+                </div>
+                <div class="item">
+                    <div class="left">民族：</div>
+                    <div class="right">{{person.nationality}}</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="item">
+                    <div class="left">籍贯：</div>
+                    <div class="right" :title="person.address">{{person.address}}</div>
+                </div>
+                <div class="item">
+                    <div class="left">年龄：</div>
+                    <div class="right">{{person.age}}</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="item">
+                    <div class="left">身份类型：</div>
+                    <div class="right" :title="person.tag">{{person.tag}}</div>
+                </div>
+                <div class="item">
+                    <div class="left">电话：</div>
+                    <div class="right">{{person.telephone}}</div>
+                </div>
+              </div>
+              <div class="row">
+                <div class="item">
+                    <div class="left">涉案信息：</div>
+                    <div class="right">无</div>
+                </div>
+              </div>
+          </div>
         </div>
          <input type="file" id="fileinput" ref="fileinput" @change="handleFileChange" style="display:none" accept="image/*" />
     </div>
@@ -217,6 +265,10 @@ window.originImgShow = function(personFullUrl, followFullUrl) {
   $(".originImage").html(tpl);
   $(".originImageWrap").css("display", "flex");
 };
+// window.getPersonInfo = function(id) {
+//   console.log(id);
+//   $vm.aaa();
+// };
 export default {
   name: "mainView",
   data() {
@@ -233,27 +285,30 @@ export default {
       pageSize: 10, //每页条数
       queryId: "", //图片pid
       totalCount: 0, //总条数
+      peersTotalCount: 0, //伴随记录总条数
       cropperImg: "", //剪裁前的图片
       cropedImg: "", //剪裁后的图片
       isShowCropper: false, //是否显示剪裁区域
       loading: false, //loading图展示
       isFirst: true, //是否是第一次加载
       popPeerList: [], //pop窗口伴随人员数据
+      person: {}, //人员详细信息
       showPopPeerList: false,
-      busName: "",
+      isShowPerson: false, //是否展示人员详情
+      groupId: "", //公交ID
       busNameOptions: [],
-      searchType: "1",
+      personType: "", //人员类型
       searchTypeOptions: [
         {
-          value: "1",
+          value: "",
           label: "所有人员"
         },
         {
-          value: "2",
+          value: "criminal",
           label: "重点人员"
         },
         {
-          value: "3",
+          value: "normal",
           label: "普通人员"
         }
       ],
@@ -280,6 +335,10 @@ export default {
     });
   },
   methods: {
+    //关闭人员详情
+    closePerson() {
+      this.isShowPerson = false;
+    },
     mouseover(pid) {
       let self = this;
       let marker_instance = [];
@@ -487,7 +546,11 @@ export default {
         "&followPersonFilter.keyWord=" +
         this.keyWord +
         "&followPersonFilter.queryId=" +
-        this.queryId;
+        this.queryId +
+        "&followPersonFilter.personType=" +
+        this.personType +
+        "&followPersonFilter.groupId=" +
+        this.groupId;
       let self = this;
       this.loading = true;
       axios
@@ -502,6 +565,7 @@ export default {
               element.checked = false; //添加是否重点人checkbox是否勾选字段  默认不勾选
             });
             self.personlist = response.data.result;
+            self.peersTotalCount = response.data.peersTotalCount;
             self.totalCount = response.data.totalCount;
             if (self.$refs.personList) {
               self.$refs.personList.scrollTop = 0;
@@ -522,10 +586,20 @@ export default {
       this.pageNo = page;
       this.followPersonQuery();
     },
-    //打开详情
+    //打开人员详情
     openPerson(id) {
-      //todo
-      console.log(id);
+      let self = this;
+      axios
+        .get("/police/person/mutiControlMapPersonDetail.action?id=" + id)
+        .then(function(response) {
+          if (response.data.status == "true") {
+            self.person = response.data.person;
+            self.isShowPerson = true;
+          }
+        })
+        .catch(function(error) {
+          console.log(error);
+        });
     },
     //搜索
     search() {
@@ -622,6 +696,7 @@ export default {
     },
     //在指定位置打开信息窗体
     openInfo(item) {
+      var self = this;
       let location = JSON.parse(item.location);
       if (this.popup != null) {
         this.map.removeInfoWindow(this.popup);
@@ -635,6 +710,9 @@ export default {
         })
       });
       this.popup.show();
+      $(".ol-popup").on("click", ".name", function() {
+        self.openPerson($(this).data("pid"));
+      });
     },
     personTraceMap(id) {
       personTraceMap(id);
@@ -1070,6 +1148,84 @@ export default {
       }
     }
   }
+  .person {
+    position: absolute;
+    bottom: 100px;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    z-index: 10000;
+    width: 355px;
+    height: 205px;
+    background: white;
+    border: 4px;
+    background: white;
+    border: 1px solid #d4d5d5;
+    border-radius: 4px;
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.38);
+    display: none;
+    .topBox {
+      width: 100%;
+      height: 80px;
+      border-bottom: 1px solid #e6ebf5;
+      display: flex;
+      flex-direction: row;
+      padding: 15px 24px;
+      position: relative;
+      .avataruri {
+        width: 50px;
+        height: 50px;
+        margin-right: 15px;
+      }
+      .close {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 15px;
+        height: 15px;
+      }
+      .right {
+        flex: 1;
+        padding: 5px;
+        .name {
+          font-weight: bold;
+          font-size: 16px;
+        }
+        .idcard {
+          color: #a2aabb;
+          font-size: 14px;
+          margin-top: 5px;
+        }
+      }
+    }
+    .bottomBox {
+      padding: 15px 24px;
+      .row {
+        display: flex;
+        flex-direction: row;
+        margin-top: 5px;
+        width: 100%;
+        &:first-child {
+          margin-top: 0;
+        }
+        .item {
+          display: flex;
+          flex: 1;
+          .left {
+            color: #a2aabb;
+          }
+          .right {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            -webkit-box-orient: vertical;
+          }
+        }
+      }
+    }
+  }
 }
 ::-webkit-scrollbar {
   width: 8px;
@@ -1109,6 +1265,7 @@ ul {
   }
   .headImg {
     width: 100%;
+    height: 202.5px;
   }
   .infoBox {
     padding: 20px;
@@ -1121,6 +1278,7 @@ ul {
       }
       .name {
         color: #2985f7;
+        cursor: pointer;
       }
       .important {
         font-size: 12px;
@@ -1133,6 +1291,7 @@ ul {
       .location {
         flex: 1;
         text-align: right;
+        cursor: pointer;
       }
     }
   }

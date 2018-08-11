@@ -5,7 +5,7 @@
         <div class="row">
             <div class="left">姓名：</div>
             {{if data.peersPersonName}}
-            <div class="name">{{data.peersPersonName}}</div>
+            <div class="name" data-pid="{{data.peersPid}}">{{data.peersPersonName}}</div>
             {{else}}
             <div class="noName">未识别</div>
             {{/if}}
@@ -33,7 +33,7 @@
         <div class="row">
             <div class="left">姓名：</div>
             {{if data.personName}}
-            <div class="name">{{data.personName}}</div>
+            <div class="name" data-pid="{{data.pId}}">{{data.personName}}</div>
             {{else}}
             <div class="noName">未识别</div>
             {{/if}}
