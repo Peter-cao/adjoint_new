@@ -12,8 +12,8 @@ module.exports = {
     assetsPublicPath: '/',
     proxyTable: {
       '/police/*': {
-        // target: 'https://10.1.2.189:30000',
-        target: 'https://127.0.0.1:8443',
+        target: 'https://10.1.2.189:30000',
+        // target: 'https://127.0.0.1:8443',
         changeOrigin: true,
         secure: false
       }

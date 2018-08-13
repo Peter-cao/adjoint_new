@@ -76,7 +76,7 @@
                       <div class="personText">
                         <div class="row">
                           <div class="left">乘车人：</div>
-                          <div class="cname" v-if="item.personName" @click.stop="openPerson(item.pId)">{{item.personName}}</div>
+                          <div class="cname" v-if="item.personName" @click.stop="openPerson(item.pId, $event)">{{item.personName}}</div>
                           <div class="name" v-else>未识别</div>
                           <div class="important" v-if="item.personType=='criminal'">重点人</div>
                           <div class="location" >
@@ -107,7 +107,7 @@
                     <ul class="peerList">
                       <li class="peerItem" v-for="(peerItem,peerIndex) in checkedfilter(item.peerList,item.checked)" :key="peerIndex" @click="peerItemClick(peerItem.id)">
                           <img :src="peerItem.peersSource" class="peerimg">
-                          <div class="peername" v-if="peerItem.peersPersonName" @click.stop="openPerson(item.pId)">{{peerItem.peersPersonName}}</div>
+                          <div class="peername" v-if="peerItem.peersPersonName" @click.stop="openPerson(item.pId, $event)">{{peerItem.peersPersonName}}</div>
                           <div class="name" v-else>未识别</div>
                           <div class="important" v-if="peerItem.peersPersonType=='criminal'">重点人</div>
                           <span class="time">{{peerItem.peersUploadDate}}</span>
@@ -163,7 +163,8 @@
                 </div>
             </div>
         </div>
-        <div class="person" :class="isShowPerson?'show':'hide'">
+        <div class="personBox" @click.stop="closePerson" :class="isShowPerson?'show':'hide'">
+        <div class="person"  :style="{left:personLeft,top:personTop}">
           <div class="topBox">
               <img :src="person.avataruri" class="avataruri">
               <div class="right">
@@ -210,6 +211,7 @@
                 </div>
               </div>
           </div>
+        </div>
         </div>
          <input type="file" id="fileinput" ref="fileinput" @change="handleFileChange" style="display:none" accept="image/*" />
     </div>
@@ -298,6 +300,8 @@ export default {
       groupId: "", //公交ID
       busNameOptions: [],
       personType: "", //人员类型
+      personLeft: 0,
+      personTop: 0,
       searchTypeOptions: [
         {
           value: "",
@@ -587,11 +591,15 @@ export default {
       this.followPersonQuery();
     },
     //打开人员详情
-    openPerson(id) {
+    openPerson(id, event) {
       let self = this;
+      console.log(event.clientX + "<<>>" + event.clientY);
+      this.personLeft = event.clientX + 30 + "px";
+      this.personTop = event.clientY - 105 + "px";
       axios
         .get("/police/person/mutiControlMapPersonDetail.action?id=" + id)
         .then(function(response) {
+          console.log(response.data);
           if (response.data.status == "true") {
             self.person = response.data.person;
             self.isShowPerson = true;
@@ -710,8 +718,8 @@ export default {
         })
       });
       this.popup.show();
-      $(".ol-popup").on("click", ".name", function() {
-        self.openPerson($(this).data("pid"));
+      $(".ol-popup").on("click", ".name", function(event) {
+        self.openPerson($(this).data("pid"), event);
       });
     },
     personTraceMap(id) {
@@ -1148,79 +1156,109 @@ export default {
       }
     }
   }
-  .person {
-    position: absolute;
-    bottom: 100px;
-    left: 0;
-    right: 0;
-    margin: 0 auto;
-    z-index: 10000;
-    width: 355px;
-    height: 205px;
-    background: white;
-    border: 4px;
-    background: white;
-    border: 1px solid #d4d5d5;
-    border-radius: 4px;
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.38);
+  .personBox {
     display: none;
-    .topBox {
-      width: 100%;
-      height: 80px;
-      border-bottom: 1px solid #e6ebf5;
-      display: flex;
-      flex-direction: row;
-      padding: 15px 24px;
-      position: relative;
-      .avataruri {
-        width: 50px;
-        height: 50px;
-        margin-right: 15px;
-      }
-      .close {
+    position: absolute;
+    z-index: 9999;
+    background-color: rgba(0, 0, 0, 0.5);
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    .person {
+      position: absolute;
+      // bottom: 100px;
+      left: 0;
+      top: 0;
+      // right: 0;
+      // margin: 0 auto;
+      z-index: 10000;
+      width: 355px;
+      height: 205px;
+      background: white;
+      border: 4px;
+      background: white;
+      border: 1px solid #d4d5d5;
+      border-radius: 4px;
+      box-shadow: 0 0 4px rgba(0, 0, 0, 0.38);
+      // display: none;
+      &:after,
+      &:before {
+        border: solid transparent;
+        content: " ";
+        height: 0;
+        right: 100%;
         position: absolute;
-        top: 8px;
-        right: 8px;
-        width: 15px;
-        height: 15px;
+        width: 0;
       }
-      .right {
-        flex: 1;
-        padding: 5px;
-        .name {
-          font-weight: bold;
-          font-size: 16px;
-        }
-        .idcard {
-          color: #a2aabb;
-          font-size: 14px;
-          margin-top: 5px;
-        }
+      &:after {
+        border-width: 13px;
+        border-right-color: white;
+        bottom: 85px;
       }
-    }
-    .bottomBox {
-      padding: 15px 24px;
-      .row {
+      &:before {
+        border-width: 14px;
+        border-right-color: #d4d5d5;
+        bottom: 84px;
+      }
+      .topBox {
+        width: 100%;
+        height: 80px;
+        border-bottom: 1px solid #e6ebf5;
         display: flex;
         flex-direction: row;
-        margin-top: 5px;
-        width: 100%;
-        &:first-child {
-          margin-top: 0;
+        padding: 15px 24px;
+        position: relative;
+        .avataruri {
+          width: 50px;
+          height: 50px;
+          margin-right: 15px;
         }
-        .item {
-          display: flex;
+        .close {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 15px;
+          height: 15px;
+        }
+        .right {
           flex: 1;
-          .left {
-            color: #a2aabb;
+          padding: 5px;
+          .name {
+            font-weight: bold;
+            font-size: 16px;
           }
-          .right {
+          .idcard {
+            color: #a2aabb;
+            font-size: 14px;
+            margin-top: 5px;
+          }
+        }
+      }
+      .bottomBox {
+        padding: 15px 24px;
+        .row {
+          display: flex;
+          flex-direction: row;
+          margin-top: 5px;
+          width: 100%;
+          &:first-child {
+            margin-top: 0;
+          }
+          .item {
+            display: flex;
             flex: 1;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            -webkit-box-orient: vertical;
+            .left {
+              color: #a2aabb;
+            }
+            .right {
+              flex: 1;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              display: -webkit-box;
+              -webkit-line-clamp: 1;
+              -webkit-box-orient: vertical;
+            }
           }
         }
       }
